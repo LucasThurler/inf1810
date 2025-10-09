@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Testes focados em big_val:
+ * - Checar extensão de sinal (negativos) e ordem de bytes (little-endian).
+ * - Casos: valores pequenos e limites LONG_MAX/LONG_MIN.
+ */
+
 void test_big_val() {
     BigInt res;
 

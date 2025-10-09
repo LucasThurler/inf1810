@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Testes de subtração (big_sub):
+ * - Validamos casos básicos e com sinais, usando comp2(b) + soma.
+ * - Limites com LONG_MAX/MIN ajudam a checar borrow entre bytes.
+ */
+
 void test_big_sub() {
     BigInt res, a, b;
 

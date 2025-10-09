@@ -1,8 +1,14 @@
 #include <stdio.h>
 #include "bigint.h"
 
-  /* Lucas Thurler Gonçalves 2212824 3WA */
-  /* João Pedro Mezian 2410625 3WA */
+/* Lucas Thurler Gonçalves 2212824 3WA */
+/* João Pedro Mezian 2410625 3WA */
+/*
+ * Teste de fumaça (smoke test):
+ * - Ideia é só validar rapidamente as operações principais com valores pequenos,
+ *   imprimindo os bytes em hexa para checagem visual.
+ * - Para testes mais completos, ver arquivos específicos (test_bigint, test_big_sum, etc.).
+ */
 
 int main(void) {
     BigInt a, b, r;

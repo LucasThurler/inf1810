@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Testes de soma (big_sum):
+ * - Começamos com casos simples (0+0, 1+1) e sinais mistos (-1+1).
+ * - Também testamos limites com LONG_MAX e LONG_MIN para ver propagação de carry.
+ */
+
 void test_big_sum() {
     BigInt res, a, b;
 

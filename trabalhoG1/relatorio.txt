@@ -1,0 +1,56 @@
+Nomes dos integrantes do grupo:
+- Lucas Thurler Gonçalves (RA 2212824) – 3WA
+- João Pedro Mezian (RA 2410625) – 3WA
+
+Escopo do projeto avaliado
+- Tipo base: BigInt de 128 bits (little-endian)
+- Arquivos: bigint.h, bigint.c
+- Operações expostas: big_val, big_comp2, big_sum, big_sub, big_mul, big_shl, big_shr, big_sar, big_dump
+- Arquivos de teste incluídos: testebigint.c (smoke), test_bigint.c (big_val), test_big_sum.c, test_big_sub.c
+
+O que verificamos que está funcionando
+- big_val: inicialização com extensão de sinal a partir de long; cobrimos casos positivos/negativos e limites (LONG_MAX/MIN) em test_bigint.c.
+- big_sum: soma byte a byte com carry; exercitamos 0+0, 1+1, -1+1, LONG_MAX+1 e LONG_MIN+(-1) em test_big_sum.c.
+- big_sub: implementamos via big_comp2(b) seguido de big_sum; validamos 0-0, 1-1, -1-1, LONG_MAX-1, LONG_MIN-(-1) em test_big_sub.c.
+- big_shl e big_shr: deslocamentos lógicos com gestão de deslocamento por bytes e bits consistentes com 128 bits.
+- big_comp2: inversão e soma de 1, percorrendo os 16 bytes.
+- Fluxo de fumaça (testebigint.c): inicialização, soma, subtração, multiplicação e shifts (esquerda, direita lógico e aritmético) com operandos pequenos positivos.
+
+Pontos que pretendemos verificar com mais profundidade
+- big_mul com operandos negativos: por usar soma de parciais com base nos bits de b (sem técnica de Booth/ajuste de sinal), o comportamento com b negativo pode não ser o esperado; recomendamos testar casos com sinais mistos.
+- big_sar (deslocamento aritmético à direita): o preenchimento do sinal ocorre por bytes ao final; para n não múltiplo de 8, pode faltar propagação do bit de sinal dentro do byte mais significativo afetado. Vamos testar n = 1, 7, 9, 15, etc., em valores negativos.
+- Cobertura de testes: ainda não temos arquivos dedicados para big_mul, big_shl, big_shr, big_sar (além do smoke). Sugerimos ampliar cobertura, especialmente em bordas (n = 0, 1, 7, 8, 15, 16, 63, 64, 127, 128) e com sinais.
+
+Nossa estratégia geral de teste
+- Critérios: validar correção funcional, sinal, limites e comportamento em bordas de 128 bits.
+- Organização do roteiro:
+  1) Inicialização (big_val): valores 0, 1, -1, LONG_MAX, LONG_MIN e padrões de bit reconhecíveis.
+  2) Aritmética básica (big_sum, big_sub): casos simétricos e cenários de overflow/underflow dentro de 128 bits; comparamos dumps por inspeção ou contra um oráculo (ex.: __int128 quando disponível no compilador).
+  3) Deslocamentos (big_shl, big_shr, big_sar): matriz com n em {0, 1, 7, 8, 15, 16, 63, 64, 127, 128} e operandos positivos/negativos; verificamos preservação de bits e, em SAR, extensão de sinal.
+  4) Complemento de dois (big_comp2): checamos que big_sum(a, a_comp2, 1) == 0 e que -(-a) == a.
+  5) Multiplicação (big_mul): começamos com pequenos positivos (3*5, 25*10), depois cruzamos sinais (+*-, -*+, -*-) e comparamos resultados esperados dentro de 128 bits.
+- Critérios de aprovação: bytes do resultado exatamente iguais ao esperado; para negativos, conferimos o bit de sinal em a[15] (0x80) e a extensão adequada.
+
+Como organizamos os arquivos de teste
+- Mantivemos um roteiro incremental por módulo: iniciamos por big_val, seguimos para soma/subtração, depois deslocamentos, complemento de dois e, por fim, multiplicação.
+- Cada etapa imprime o dump em hexadecimal por byte (big_dump), o que facilita a inspeção visual e a comparação automatizada.
+- Arquivos:
+  - test_bigint.c: foco em big_val e inspeção de LONG_MAX/MIN.
+  - test_big_sum.c: casos básicos e limites de soma.
+  - test_big_sub.c: casos básicos e limites de subtração.
+  - test_mul.c (sugerido): adicionar casos com sinais e bordas.
+  - test_shift.c (sugerido): matriz de deslocamentos com n variados e sinais.
+
+Como executamos/pretendemos executar os testes
+- Compilação e execução individual para inspeção direcionada:
+  gcc -std=c11 -Wall -Wextra -O2 testebigint.c bigint.c -o testebigint && ./testebigint
+  gcc -std=c11 -Wall -Wextra -O2 test_bigint.c bigint.c -o test_bigint && ./test_bigint
+  gcc -std=c11 -Wall -Wextra -O2 test_big_sum.c bigint.c -o test_big_sum && ./test_big_sum
+  gcc -std=c11 -Wall -Wextra -O2 test_big_sub.c bigint.c -o test_big_sub && ./test_big_sub
+
+Observações
+- Não explicamos a implementação neste relatório; focamos em resultados e plano de testes.
+- Recomendamos adicionar testes automatizados que comparem dumps com expected outputs para regressão.
+
+Referência do repositório
+- https://github.com/LucasThurler/inf1810/tree/main/trabalhoG1
