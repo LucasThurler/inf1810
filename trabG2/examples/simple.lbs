@@ -1,0 +1,15 @@
+; Exemplo 1: função que retorna constante
+function
+  ret $100
+end
+
+; Exemplo 2: função que retorna o parâmetro
+function
+  ret p0
+end
+
+; Exemplo 3: função que soma parâmetro com constante
+function
+  v0 = p0 + $1
+  ret v0
+end
