@@ -61,241 +61,168 @@ typedef struct {
 } GenContext;
 
 /* ========================================================================
- * UTILITÁRIOS DE PARSING
+ * PARSER COM fscanf conforme enunciado
  * ======================================================================== */
 
-/* Pula espaços em branco e comentários */
-static void skip_whitespace(FILE *f) {
-    int c;
-    while ((c = fgetc(f)) != EOF) {
-        if (isspace(c)) continue;
-        if (c == ';') {
-            /* comentário: pula até fim de linha */
-            while ((c = fgetc(f)) != EOF && c != '\n');
-            continue;
-        }
-        ungetc(c, f);
-        break;
-    }
-}
-
-/* Lê um identificador/palavra-chave */
-static int read_identifier(FILE *f, char *buf, int max_len) {
-    skip_whitespace(f);
-    int i = 0;
-    int c;
-    while ((c = fgetc(f)) != EOF && (isalnum(c) || c == '_')) {
-        if (i < max_len - 1) buf[i++] = c;
-    }
-    if (c != EOF) ungetc(c, f);
-    buf[i] = '\0';
-    return i > 0;
-}
-
-/* Lê um número inteiro (com sinal opcional) */
-static int read_number(FILE *f, int *out) {
-    skip_whitespace(f);
-    int c;
-    int sign = 1;
-    int num = 0;
-    int found_digit = 0;
-
-    c = fgetc(f);
-    if (c == '-') {
-        sign = -1;
-        c = fgetc(f);
-    } else if (c == '+') {
-        c = fgetc(f);
-    }
-
-    while (c != EOF && isdigit(c)) {
-        num = num * 10 + (c - '0');
-        found_digit = 1;
-        c = fgetc(f);
-    }
-    if (c != EOF) ungetc(c, f);
-
-    if (found_digit) {
-        *out = sign * num;
-        return 1;
-    }
-    return 0;
-}
-
-/* Lê um operando (const $n, var v0..v4, ou param p0) */
-static Operand read_operand(FILE *f) {
-    Operand op;
-    op.type = OPERAND_INVALID;
-    op.value = 0;
-
-    skip_whitespace(f);
-    int c = fgetc(f);
-
-    if (c == '$') {
-        /* constante */
-        int num;
-        if (read_number(f, &num)) {
-            op.type = OPERAND_CONST;
-            op.value = num;
-        }
-    } else if (c == 'v') {
-        /* variável local */
-        int idx;
-        if (read_number(f, &idx) && idx >= 0 && idx <= 4) {
-            op.type = OPERAND_VAR;
-            op.value = idx;
-        }
-    } else if (c == 'p') {
-        /* parâmetro p0 */
-        int idx;
-        if (read_number(f, &idx) && idx == 0) {
-            op.type = OPERAND_PARAM;
-            op.value = 0;
-        }
-    } else {
-        if (c != EOF) ungetc(c, f);
-    }
-
-    return op;
-}
-
-/* ========================================================================
- * PARSER
- * ======================================================================== */
-
-/* Faz parse de uma instrução dentro de uma função
- * Retorna tipo de instrução ou INSTR_INVALID se falhar
- */
-static Instruction parse_instruction(FILE *f) {
-    Instruction instr;
-    memset(&instr, 0, sizeof(instr));
-    instr.type = INSTR_INVALID;
-
-    char keyword[64];
-    if (!read_identifier(f, keyword, sizeof(keyword))) {
-        return instr;
-    }
-
-    /* Tenta interpretar como instrução */
-    if (strcmp(keyword, "ret") == 0) {
-        /* ret expr */
-        instr.type = INSTR_RET;
-        instr.src1 = read_operand(f);
-        if (instr.src1.type == OPERAND_INVALID) {
-            instr.type = INSTR_INVALID;
-        }
-    } else if (strcmp(keyword, "zret") == 0) {
-        /* zret cond expr */
-        instr.type = INSTR_ZRET;
-        instr.src1 = read_operand(f);
-        instr.src2 = read_operand(f);
-        if (instr.src1.type == OPERAND_INVALID || instr.src2.type == OPERAND_INVALID) {
-            instr.type = INSTR_INVALID;
-        }
-    } else if (strcmp(keyword, "call") == 0) {
-        /* call func_num arg */
-        if (!read_number(f, &instr.func_num)) {
-            return instr;
-        }
-        instr.type = INSTR_CALL;
-        instr.src1 = read_operand(f);
-        if (instr.src1.type == OPERAND_INVALID) {
-            instr.type = INSTR_INVALID;
-        }
-    } else {
-        /* Assumir que é uma atribuição: var = expr */
-        /* keyword deve ser um v0..v4 ou p0 */
-        if (keyword[0] == 'v' && strlen(keyword) == 2 &&
-            isdigit(keyword[1])) {
-            int idx = keyword[1] - '0';
-            if (idx >= 0 && idx <= 4) {
-                instr.dest.type = OPERAND_VAR;
-                instr.dest.value = idx;
-
-                skip_whitespace(f);
-                int c = fgetc(f);
-                if (c == '=') {
-                    /* lê operandos e operador aritmético */
-                    instr.src1 = read_operand(f);
-                    if (instr.src1.type == OPERAND_INVALID) {
-                        return instr;
-                    }
-
-                    skip_whitespace(f);
-                    c = fgetc(f);
-                    if (c == '+' || c == '-' || c == '*') {
-                        instr.op = c;
-                        instr.type = INSTR_ARITH;
-                        instr.src2 = read_operand(f);
-                        if (instr.src2.type == OPERAND_INVALID) {
-                            instr.type = INSTR_INVALID;
-                        }
-                    } else {
-                        /* sem operador: apenas atribuição */
-                        if (c != EOF) ungetc(c, f);
-                        instr.type = INSTR_ASSIGN;
-                        instr.src1 = read_operand(f);
-                    }
-                } else {
-                    if (c != EOF) ungetc(c, f);
-                }
-            }
-        }
-    }
-
-    return instr;
-}
-
-/* Faz parse de uma função completa (function ... end) */
-static Function parse_function(FILE *f, int func_num) {
-    Function func;
-    memset(&func, 0, sizeof(func));
-    func.num = func_num;
-
-    /* Aloca array inicial de instruções */
-    int capacity = 16;
-    func.instrs = malloc(capacity * sizeof(Instruction));
-    func.num_instrs = 0;
-
-    char keyword[64];
-    while (read_identifier(f, keyword, sizeof(keyword))) {
-        if (strcmp(keyword, "end") == 0) {
-            break;
-        }
-
-        /* Volta para reler como instrução */
-        ungetc(keyword[0], f);
-        fseek(f, -strlen(keyword), SEEK_CUR);
-
-        Instruction instr = parse_instruction(f);
-        if (instr.type != INSTR_INVALID) {
-            if (func.num_instrs >= capacity) {
-                capacity *= 2;
-                func.instrs = realloc(func.instrs, capacity * sizeof(Instruction));
-            }
-            func.instrs[func.num_instrs++] = instr;
-        }
-    }
-
-    return func;
-}
-
-/* Faz parse do arquivo LBS completo */
+/* Faz parse do arquivo LBS completo usando fscanf */
 static int parse_file(FILE *f, Function **out_funcs) {
     int num_functions = 0;
     int capacity = 8;
     *out_funcs = malloc(capacity * sizeof(Function));
+    int line = 1;
 
-    char keyword[64];
-    while (read_identifier(f, keyword, sizeof(keyword))) {
-        if (strcmp(keyword, "function") == 0) {
-            if (num_functions >= capacity) {
-                capacity *= 2;
-                *out_funcs = realloc(*out_funcs, capacity * sizeof(Function));
+    int c;
+    while ((c = fgetc(f)) != EOF) {
+        switch (c) {
+            case 'f': { /* function */
+                char c0;
+                if (fscanf(f, "unction%c", &c0) != 1) {
+                    fprintf(stderr, "erro: comando invalido na linha %d\n", line);
+                    break;
+                }
+
+                /* Aloca nova função */
+                if (num_functions >= capacity) {
+                    capacity *= 2;
+                    *out_funcs = realloc(*out_funcs, capacity * sizeof(Function));
+                }
+
+                Function *func = &(*out_funcs)[num_functions];
+                memset(func, 0, sizeof(Function));
+                func->num = num_functions;
+                func->instrs = malloc(16 * sizeof(Instruction));
+                func->num_instrs = 0;
+
+                /* Lê instruções até end */
+                int instr_c;
+                while ((instr_c = fgetc(f)) != EOF) {
+                    if (instr_c == '\n') {
+                        line++;
+                        continue;
+                    }
+                    
+                    /* Verifica end */
+                    if (instr_c == 'e') {
+                        char c_e;
+                        if (fscanf(f, "nd%c", &c_e) != 1) {
+                            ungetc(instr_c, f);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    /* Processa instrução dentro da função */
+                    if (instr_c == 'r') { /* ret */
+                        int idx0;
+                        char var0;
+                        if (fscanf(f, "et %c%d", &var0, &idx0) != 2) {
+                            fprintf(stderr, "erro: comando invalido na linha %d\n", line);
+                        } else {
+                            Instruction instr;
+                            memset(&instr, 0, sizeof(instr));
+                            instr.type = INSTR_RET;
+                            instr.src1.type = (var0 == '$') ? OPERAND_CONST : 
+                                             (var0 == 'v') ? OPERAND_VAR : OPERAND_PARAM;
+                            instr.src1.value = (var0 == '$') ? idx0 : idx0;
+                            if (func->num_instrs >= 16) {
+                                func->instrs = realloc(func->instrs, 
+                                    (func->num_instrs + 16) * sizeof(Instruction));
+                            }
+                            func->instrs[func->num_instrs++] = instr;
+                        }
+                    } else if (instr_c == 'z') { /* zret */
+                        int idx0, idx1;
+                        char var0, var1;
+                        if (fscanf(f, "ret %c%d %c%d", &var0, &idx0, &var1, &idx1) != 4) {
+                            fprintf(stderr, "erro: comando invalido na linha %d\n", line);
+                        } else {
+                            Instruction instr;
+                            memset(&instr, 0, sizeof(instr));
+                            instr.type = INSTR_ZRET;
+                            instr.src1.type = (var0 == '$') ? OPERAND_CONST : 
+                                             (var0 == 'v') ? OPERAND_VAR : OPERAND_PARAM;
+                            instr.src1.value = idx0;
+                            instr.src2.type = (var1 == '$') ? OPERAND_CONST : 
+                                             (var1 == 'v') ? OPERAND_VAR : OPERAND_PARAM;
+                            instr.src2.value = idx1;
+                            if (func->num_instrs >= 16) {
+                                func->instrs = realloc(func->instrs, 
+                                    (func->num_instrs + 16) * sizeof(Instruction));
+                            }
+                            func->instrs[func->num_instrs++] = instr;
+                        }
+                    } else if (instr_c == 'v') { /* atribuição */
+                        int idx0;
+                        char c0;
+                        if (fscanf(f, "%d = %c", &idx0, &c0) != 2) {
+                            fprintf(stderr, "erro: comando invalido na linha %d\n", line);
+                        } else if (c0 == 'c') { /* call */
+                            int func_num, idx1;
+                            char var1;
+                            if (fscanf(f, "all %d %c%d", &func_num, &var1, &idx1) != 3) {
+                                fprintf(stderr, "erro: comando invalido na linha %d\n", line);
+                            } else {
+                                Instruction instr;
+                                memset(&instr, 0, sizeof(instr));
+                                instr.type = INSTR_CALL;
+                                instr.dest.type = OPERAND_VAR;
+                                instr.dest.value = idx0;
+                                instr.func_num = func_num;
+                                instr.src1.type = (var1 == '$') ? OPERAND_CONST : 
+                                                 (var1 == 'v') ? OPERAND_VAR : OPERAND_PARAM;
+                                instr.src1.value = idx1;
+                                if (func->num_instrs >= 16) {
+                                    func->instrs = realloc(func->instrs, 
+                                        (func->num_instrs + 16) * sizeof(Instruction));
+                                }
+                                func->instrs[func->num_instrs++] = instr;
+                            }
+                        } else { /* operação aritmética */
+                            int idx1, idx2;
+                            char var1 = c0, var2, op;
+                            if (fscanf(f, "%d %c %c%d", &idx1, &op, &var2, &idx2) != 4) {
+                                fprintf(stderr, "erro: comando invalido na linha %d\n", line);
+                            } else {
+                                Instruction instr;
+                                memset(&instr, 0, sizeof(instr));
+                                instr.type = INSTR_ARITH;
+                                instr.dest.type = OPERAND_VAR;
+                                instr.dest.value = idx0;
+                                instr.src1.type = (var1 == '$') ? OPERAND_CONST : 
+                                                 (var1 == 'v') ? OPERAND_VAR : OPERAND_PARAM;
+                                instr.src1.value = idx1;
+                                instr.src2.type = (var2 == '$') ? OPERAND_CONST : 
+                                                 (var2 == 'v') ? OPERAND_VAR : OPERAND_PARAM;
+                                instr.src2.value = idx2;
+                                instr.op = op;
+                                if (func->num_instrs >= 16) {
+                                    func->instrs = realloc(func->instrs, 
+                                        (func->num_instrs + 16) * sizeof(Instruction));
+                                }
+                                func->instrs[func->num_instrs++] = instr;
+                            }
+                        }
+                    } else {
+                        fprintf(stderr, "erro: comando desconhecido na linha %d\n", line);
+                    }
+                }
+
+                num_functions++;
+                break;
             }
-            (*out_funcs)[num_functions] = parse_function(f, num_functions);
-            num_functions++;
+            case '\n': {
+                line++;
+                break;
+            }
+            default: {
+                /* Ignora outros caracteres (espaços, tabs) */
+                break;
+            }
         }
+        
+        /* Pula espaços */
+        int ret = fscanf(f, " ");
+        (void)ret;
     }
 
     return num_functions;
@@ -376,28 +303,53 @@ static void emit_param_return(unsigned char *code, int *offset) {
     code[(*offset)++] = 0xc3;
 }
 
-/* Emite uma função com operação aritmética simples: p0 + $const
- * Sem prologue/epilogue (funciona para x86-64 System V ABI sem variáveis locais).
+/* Emite uma função com operação aritmética: v0 = p0 OP $const; ret v0
+ * Suporta operadores: + (add), - (sub), * (imul)
  * 
- * Bytecode baseado em assembly real:
+ * Bytecode:
  *   89 f8        mov %edi, %eax       (p0 para eax)
- *   83 c0 XX     add $XX, %eax        (add constante)
+ *   83/81 c0/e8 XX     add/sub $const, %eax
  *   c3           ret
  */
-static void emit_add_const_return(unsigned char *code, int *offset, int constant) {
+static void emit_arith_const_return(unsigned char *code, int *offset, 
+                                    char op, int constant) {
     /* mov %edi, %eax (p0 para eax) */
     code[(*offset)++] = 0x89;
     code[(*offset)++] = 0xf8;
     
-    /* add $constant, %eax */
-    if (constant >= -128 && constant <= 127) {
-        /* add $imm8, %eax (instrução curta) */
-        code[(*offset)++] = 0x83;
+    /* Operação aritmética com constante */
+    if (op == '+') {
+        /* add $constant, %eax */
+        if (constant >= -128 && constant <= 127) {
+            code[(*offset)++] = 0x83;
+            code[(*offset)++] = 0xc0;
+            code[(*offset)++] = constant & 0xFF;
+        } else {
+            code[(*offset)++] = 0x05;
+            code[(*offset)++] = (constant >>  0) & 0xFF;
+            code[(*offset)++] = (constant >>  8) & 0xFF;
+            code[(*offset)++] = (constant >> 16) & 0xFF;
+            code[(*offset)++] = (constant >> 24) & 0xFF;
+        }
+    } else if (op == '-') {
+        /* sub $constant, %eax */
+        if (constant >= -128 && constant <= 127) {
+            code[(*offset)++] = 0x83;
+            code[(*offset)++] = 0xe8;
+            code[(*offset)++] = constant & 0xFF;
+        } else {
+            code[(*offset)++] = 0x2d;
+            code[(*offset)++] = (constant >>  0) & 0xFF;
+            code[(*offset)++] = (constant >>  8) & 0xFF;
+            code[(*offset)++] = (constant >> 16) & 0xFF;
+            code[(*offset)++] = (constant >> 24) & 0xFF;
+        }
+    } else if (op == '*') {
+        /* imul $constant, %eax -> mov para ecx, imul $constant, %eax, %ecx */
+        /* Mais complexo - vamos usar: imul $constant, %eax */
+        /* Instrução: 69 c0 XX XX XX XX (imul $imm32, %eax, %eax) */
+        code[(*offset)++] = 0x69;
         code[(*offset)++] = 0xc0;
-        code[(*offset)++] = constant & 0xFF;
-    } else {
-        /* add $imm32, %eax (instrução longa) */
-        code[(*offset)++] = 0x05;
         code[(*offset)++] = (constant >>  0) & 0xFF;
         code[(*offset)++] = (constant >>  8) & 0xFF;
         code[(*offset)++] = (constant >> 16) & 0xFF;
@@ -406,6 +358,101 @@ static void emit_add_const_return(unsigned char *code, int *offset, int constant
     
     /* ret */
     code[(*offset)++] = 0xc3;
+}
+
+/* ========================================================================
+ * EMITTERS COM STACK FRAME
+ * ======================================================================== */
+
+/* Calcula o offset de uma variável local no stack.
+ * v0 = -8(%rbp), v1 = -12(%rbp), ..., v4 = -28(%rbp)
+ */
+static int var_offset(int var_idx) {
+    return -(8 + var_idx * 4);
+}
+
+/* Emite código para salvar um valor em uma variável local */
+static void emit_store_var(unsigned char *code, int *offset, int var_idx) {
+    int off = var_offset(var_idx);
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0x45;
+    code[(*offset)++] = off & 0xFF;
+}
+
+/* Emite código para carregar uma variável local em %eax */
+static void emit_load_var(unsigned char *code, int *offset, int var_idx) {
+    int off = var_offset(var_idx);
+    code[(*offset)++] = 0x8b;
+    code[(*offset)++] = 0x45;
+    code[(*offset)++] = off & 0xFF;
+}
+
+/* Emite prologue com stack frame */
+static void emit_prologue(unsigned char *code, int *offset) {
+    code[(*offset)++] = 0x55;
+    code[(*offset)++] = 0x48;
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xe5;
+    code[(*offset)++] = 0x48;
+    code[(*offset)++] = 0x83;
+    code[(*offset)++] = 0xec;
+    code[(*offset)++] = 0x28;
+}
+
+/* Emite epilogue */
+static void emit_epilogue(unsigned char *code, int *offset) {
+    code[(*offset)++] = 0x48;
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xec;
+    code[(*offset)++] = 0x5d;
+    code[(*offset)++] = 0xc3;
+}
+
+/* Emite retorno condicional (zret).
+ * Semântica: se primeiro operando == 0, retorna segundo operando; senão continua.
+ * 
+ * Bytecode:
+ *   83 ff 00        cmp $0, %edi       (testa se p0 == 0)
+ *   75 06           jne else_case      (pula 6 bytes se NÃO zero)
+ *   b8 64 00 00 00  mov $0x64, %eax   (carrega valor de retorno se for zero)
+ *   c3              ret
+ *   b8 00 00 00 00  mov $0, %eax      (retorna 0 se não entrou)
+ *   c3              ret
+ */
+static void emit_zret_simple(unsigned char *code, int *offset, 
+                             int cond_value, int ret_value) {
+    /* Testa se condição == 0: cmp $0, valor */
+    /* Para p0: cmp $0, %edi */
+    if (cond_value == 0) {
+        /* Teste do parâmetro p0 */
+        code[(*offset)++] = 0x83;
+        code[(*offset)++] = 0xff;
+        code[(*offset)++] = 0x00;
+        
+        /* jne (jump if not equal) - pula se NÃO for zero */
+        code[(*offset)++] = 0x75;
+        code[(*offset)++] = 0x06;  /* tamanho de mov $imm32, %eax = 5 + ret = 1 = 6 */
+        
+        /* mov $ret_value, %eax (se chegou aqui, p0 era zero) */
+        code[(*offset)++] = 0xb8;
+        code[(*offset)++] = (ret_value >>  0) & 0xFF;
+        code[(*offset)++] = (ret_value >>  8) & 0xFF;
+        code[(*offset)++] = (ret_value >> 16) & 0xFF;
+        code[(*offset)++] = (ret_value >> 24) & 0xFF;
+        
+        /* ret */
+        code[(*offset)++] = 0xc3;
+        
+        /* else case: mov $0, %eax (retorna 0 se condição não era zero) */
+        code[(*offset)++] = 0xb8;
+        code[(*offset)++] = 0x00;
+        code[(*offset)++] = 0x00;
+        code[(*offset)++] = 0x00;
+        code[(*offset)++] = 0x00;
+        
+        /* ret */
+        code[(*offset)++] = 0xc3;
+    }
 }
 
 /* Emite uma função que chama outra função.
@@ -462,6 +509,103 @@ static void emit_call_function(unsigned char *code, int *offset,
     code[(*offset)++] = 0xc3;
 }
 
+/* Emite uma função genérica com stack frame completo
+ * Suporta: atribuições, operações aritméticas, ret
+ */
+static void emit_generic_with_frame(unsigned char *code, int *offset,
+                                     Function *func) {
+    emit_prologue(code, offset);
+    
+    for (int i = 0; i < func->num_instrs; i++) {
+        Instruction *instr = &func->instrs[i];
+        
+        if (instr->type == INSTR_ARITH) {
+            /* v_dest = src1 op src2 */
+            int var_dest = instr->dest.value;
+            
+            /* Carrega primeiro operando em %eax */
+            if (instr->src1.type == OPERAND_CONST) {
+                code[(*offset)++] = 0xb8;
+                int val = instr->src1.value;
+                code[(*offset)++] = (val >>  0) & 0xFF;
+                code[(*offset)++] = (val >>  8) & 0xFF;
+                code[(*offset)++] = (val >> 16) & 0xFF;
+                code[(*offset)++] = (val >> 24) & 0xFF;
+            } else if (instr->src1.type == OPERAND_PARAM) {
+                code[(*offset)++] = 0x89;
+                code[(*offset)++] = 0xf8;
+            } else if (instr->src1.type == OPERAND_VAR) {
+                emit_load_var(code, offset, instr->src1.value);
+            }
+            
+            /* Aplica operação */
+            if (instr->op == '+') {
+                if (instr->src2.type == OPERAND_CONST) {
+                    int val = instr->src2.value;
+                    if (val >= -128 && val <= 127) {
+                        code[(*offset)++] = 0x83;
+                        code[(*offset)++] = 0xc0;
+                        code[(*offset)++] = val & 0xFF;
+                    } else {
+                        code[(*offset)++] = 0x05;
+                        code[(*offset)++] = (val >>  0) & 0xFF;
+                        code[(*offset)++] = (val >>  8) & 0xFF;
+                        code[(*offset)++] = (val >> 16) & 0xFF;
+                        code[(*offset)++] = (val >> 24) & 0xFF;
+                    }
+                }
+            } else if (instr->op == '-') {
+                if (instr->src2.type == OPERAND_CONST) {
+                    int val = instr->src2.value;
+                    if (val >= -128 && val <= 127) {
+                        code[(*offset)++] = 0x83;
+                        code[(*offset)++] = 0xe8;
+                        code[(*offset)++] = val & 0xFF;
+                    } else {
+                        code[(*offset)++] = 0x2d;
+                        code[(*offset)++] = (val >>  0) & 0xFF;
+                        code[(*offset)++] = (val >>  8) & 0xFF;
+                        code[(*offset)++] = (val >> 16) & 0xFF;
+                        code[(*offset)++] = (val >> 24) & 0xFF;
+                    }
+                }
+            } else if (instr->op == '*') {
+                if (instr->src2.type == OPERAND_CONST) {
+                    int val = instr->src2.value;
+                    code[(*offset)++] = 0x69;
+                    code[(*offset)++] = 0xc0;
+                    code[(*offset)++] = (val >>  0) & 0xFF;
+                    code[(*offset)++] = (val >>  8) & 0xFF;
+                    code[(*offset)++] = (val >> 16) & 0xFF;
+                    code[(*offset)++] = (val >> 24) & 0xFF;
+                }
+            }
+            
+            /* Salva resultado */
+            emit_store_var(code, offset, var_dest);
+            
+        } else if (instr->type == INSTR_RET) {
+            /* Carrega valor de retorno */
+            if (instr->src1.type == OPERAND_CONST) {
+                code[(*offset)++] = 0xb8;
+                int val = instr->src1.value;
+                code[(*offset)++] = (val >>  0) & 0xFF;
+                code[(*offset)++] = (val >>  8) & 0xFF;
+                code[(*offset)++] = (val >> 16) & 0xFF;
+                code[(*offset)++] = (val >> 24) & 0xFF;
+            } else if (instr->src1.type == OPERAND_PARAM) {
+                code[(*offset)++] = 0x89;
+                code[(*offset)++] = 0xf8;
+            } else if (instr->src1.type == OPERAND_VAR) {
+                emit_load_var(code, offset, instr->src1.value);
+            }
+            break;
+        }
+    }
+    
+    emit_epilogue(code, offset);
+}
+
 /* ========================================================================
  * INTERFACE PÚBLICA
  * ======================================================================== */
@@ -504,7 +648,7 @@ void gera_codigo(FILE *f, unsigned char code[], funcp *entry) {
             
             emit_param_return(ctx.code_buffer, &ctx.code_offset);
         }
-        /* Caso 3: v0 = p0 + $const; ret v0 */
+        /* Caso 3: v0 = p0 OP $const; ret v0 (onde OP = +, -, ou *) */
         else if (func->num_instrs == 2 &&
                  func->instrs[0].type == INSTR_ARITH &&
                  func->instrs[0].dest.type == OPERAND_VAR &&
@@ -512,13 +656,14 @@ void gera_codigo(FILE *f, unsigned char code[], funcp *entry) {
                  func->instrs[0].src1.type == OPERAND_PARAM &&
                  func->instrs[0].src1.value == 0 &&  /* p0 */
                  func->instrs[0].src2.type == OPERAND_CONST &&
-                 func->instrs[0].op == '+' &&
+                 (func->instrs[0].op == '+' || func->instrs[0].op == '-' || func->instrs[0].op == '*') &&
                  func->instrs[1].type == INSTR_RET &&
                  func->instrs[1].src1.type == OPERAND_VAR &&
                  func->instrs[1].src1.value == 0) {  /* ret v0 */
             
             int const_value = func->instrs[0].src2.value;
-            emit_add_const_return(ctx.code_buffer, &ctx.code_offset, const_value);
+            char op = func->instrs[0].op;
+            emit_arith_const_return(ctx.code_buffer, &ctx.code_offset, op, const_value);
         }
         /* Caso 4: v0 = call func p0; ret v0 */
         else if (func->num_instrs == 2 &&
@@ -539,7 +684,39 @@ void gera_codigo(FILE *f, unsigned char code[], funcp *entry) {
                 emit_const_return(ctx.code_buffer, &ctx.code_offset, 0);
             }
         }
-        /* Fallback */
+        /* Caso 5: zret p0 $const (retorno condicional simples) */
+        else if (func->num_instrs == 1 &&
+                 func->instrs[0].type == INSTR_ZRET &&
+                 func->instrs[0].src1.type == OPERAND_PARAM &&
+                 func->instrs[0].src1.value == 0 &&  /* testa p0 */
+                 func->instrs[0].src2.type == OPERAND_CONST) {
+            
+            emit_zret_simple(ctx.code_buffer, &ctx.code_offset, 
+                           func->instrs[0].src1.value,  /* cond_value (p0) */
+                           func->instrs[0].src2.value); /* ret_value ($const) */
+        }
+        /* Caso 6: Operações complexas com variáveis locais (usar stack frame) */
+        else if (func->num_instrs >= 1) {
+            /* Verifica se usa variáveis locais */
+            int uses_vars = 0;
+            for (int j = 0; j < func->num_instrs; j++) {
+                if (func->instrs[j].dest.type == OPERAND_VAR ||
+                    func->instrs[j].src1.type == OPERAND_VAR ||
+                    func->instrs[j].src2.type == OPERAND_VAR) {
+                    uses_vars = 1;
+                    break;
+                }
+            }
+            
+            if (uses_vars) {
+                /* Usa stack frame genérico */
+                emit_generic_with_frame(ctx.code_buffer, &ctx.code_offset, func);
+            } else {
+                /* Fallback */
+                emit_const_return(ctx.code_buffer, &ctx.code_offset, 0);
+            }
+        }
+        /* Fallback final */
         else {
             emit_const_return(ctx.code_buffer, &ctx.code_offset, 0);
         }

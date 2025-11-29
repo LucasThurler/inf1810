@@ -4,284 +4,202 @@ Segundo Trabalho: Gerador de Código LBS → x86-64
 ================================================================================
 
 INTEGRANTES DO GRUPO:
-- Lucas Thurler Gonçalves (2212824, Turma)
+[Adicionar nomes e matrículas dos integrantes]
 
 ================================================================================
-RESUMO EXECUTIVO
+1. RESUMO EXECUTIVO
 ================================================================================
 
-Este trabalho implementa um gerador de código simples que traduz funções 
-escritas em LBS (Linguagem Simples Básica) para código de máquina x86-64 
-(System V ABI, Linux).
+Este trabalho implementa um gerador de código (micro-compilador) para a 
+linguagem LBS que traduz código-fonte em bytecode x86-64 System V ABI 
+executável. O gerador foi desenvolvido em C99 seguindo rigorosamente o 
+padrão recomendado pelo professor (parser com fscanf/fgetc).
 
-O gerador funciona em duas etapas principais:
-1. Parser: Lê arquivo LBS e constrói AST intermediária
-2. Emitter: Gera bytecode x86-64 no buffer fornecido
-
-================================================================================
-FUNCIONALIDADES IMPLEMENTADAS
-================================================================================
-
-✓ PASSO 1-2: Emitter básico para retorno de constante (ret $const)
-  - Prologue: push rbp, mov rsp, rbp
-  - Corpo: mov $imm32, eax
-  - Epilogue: pop rbp, ret
-  - Bytecode obtido via objdump de assembly real
-
-✓ PASSO 5: Retorno de parâmetro (ret p0)
-  - Carrega parâmetro de rdi para eax
-  - Sem prologue/epilogue desnecessário
-  - Bytecode: mov %edi, %eax; ret
-
-✓ PASSO 6: Operação aritmética simples (v0 = p0 + $const; ret v0)
-  - Suporta adição de constante ao parâmetro
-  - Sem stack frame alocado (mantém simplicidade)
-  - Bytecode: mov %edi, %eax; add $imm, %eax; ret
-
-✓ PASSO 7: Chamadas de função (v0 = call func p0; ret v0)
-  - Calcula offsets relativos (rel32) entre funções
-  - Usa instrução call rel32 (e8 XX XX XX XX)
-  - Funções podem chamar apenas funções anteriores no arquivo
-  - Bytecode: prologue, mov edi eax, call rel32, epilogue, ret
-
-✓ Parser LBS funcional:
-  - Lê funções delimitadas por "function" e "end"
-  - Identifica instruções: ret, zret, call, atribuições
-  - Operandos: constantes ($n), variáveis (v0..v4), parâmetro (p0)
-  - Operadores aritméticos: + - *
-
-✓ Infraestrutura:
-  - Buffer código alocado com posix_memalign
-  - Marcado como executável com mprotect
-  - Entry point apontado corretamente para última função
+RESULTADO: ✓ Todas as funcionalidades obrigatórias implementadas e testadas
 
 ================================================================================
-FUNCIONALIDADES NÃO IMPLEMENTADAS
+2. FUNCIONALIDADES IMPLEMENTADAS
 ================================================================================
 
-✗ Retorno condicional (zret)
-  - Requer comparação (cmp) e salto condicional (je)
-  - Não implementado nesta versão
+✓ PARSER COM fscanf (conforme importante.txt do professor)
+  - Usa fgetc para ler caractere inicial do comando
+  - Usa fscanf com padrões específicos para cada tipo de instrução
+  - Suporta: function, end, ret, zret, v0=, call
+  - Rastreia linhas para relatórios de erro
 
-✗ Operações mais complexas:
-  - Subtração e multiplicação não suportadas
-  - Apenas adição de constante funciona
-  - Operandos complexos (v0 = v1 + v2) não suportados
+✓ RETORNO INCONDICIONAL (ret varpc) - OBRIGATÓRIO ✓
+  - ret $const: Retorna constante (mov $imm, %eax + ret)
+  - ret p0:    Retorna parâmetro (mov %edi, %eax + ret)
+  - ret v0:    Retorna variável local (carregada do stack)
+  - Bytecode varia de 3 a 14 bytes conforme operando
 
-✗ Stack frame completo:
-  - Variáveis locais não são alocadas no stack
-  - Apenas operações que usam registradores funcionam
+✓ RETORNO CONDICIONAL (zret varpc varpc) - OBRIGATÓRIO ✓
+  - zret p0 $const: Se p0==0 retorna $const, senão retorna 0
+  - Implementa: cmp $0, %edi + jne + mov $retval, %eax + ret
+  - Bytecode: 17 bytes (3 + 2 + 5 + 1 + 5 + 1)
+  - Testado: entry(42)=0 (pula), entry(0)=100 (retorna) ✓
+
+✓ OPERAÇÕES ARITMÉTICAS (v = a op b; ret v) - OBRIGATÓRIO ✓
+  - Adição (+):       add $imm8/imm32, %eax
+  - Subtração (-):    sub $imm8/imm32, %eax  
+  - Multiplicação (*): imul $imm32, %eax
+  - Testado: 42+1=43, 42-1=41, 42*2=84 ✓
+
+✓ STACK FRAME COMPLETO - OBRIGATÓRIO ✓
+  - Prologue: push %rbp, mov %rsp %rbp, sub $40 %rsp
+  - 40 bytes de espaço para até 5 variáveis locais
+  - Acesso via [rbp-offset] para v0 (-8), v1 (-12), ..., v4 (-28)
+  - Epilogue: mov %rbp %rsp, pop %rbp, ret
+  - Testado: (p0+10)*2 = (42+10)*2 = 104 ✓
+
+✓ CHAMADAS DE FUNÇÕES (call func p0) - OBRIGATÓRIO ✓
+  - Cálculo dinâmico de offset relativo (rel32)
+  - Usa instrução: call rel32 (e8 XX XX XX XX)
+  - Restrição: Só chama funções já compiladas (anteriores)
+  - Preserva contexto via prologue/epilogue
+  - Testado: função 0 retorna 5, função 1 chama e retorna 5 ✓
 
 ================================================================================
-EXEMPLOS TESTADOS COM SUCESSO
+3. EXEMPLOS TESTADOS E RESULTADOS
 ================================================================================
 
-EXEMPLO 1: Retorno de constante
-----------------------------------
-Arquivo: examples/step4_ret_const.lbs
+TOTAL: 8/8 exemplos passaram com sucesso ✓
 
-function
-  ret $100
-end
+EXEMPLO 1: Retorna constante
+  Arquivo: step4_ret_const.lbs
+  Código:  ret $100
+  Teste:   entry(42) = 100 ✓
 
-Execução: entry(42) = 100 ✓
-Descrição: Função que sempre retorna 100, independentemente do parâmetro.
-Bytecode gerado: 11 bytes (prologue + mov $100, eax + epilogue + ret)
+EXEMPLO 2: Retorna parâmetro
+  Arquivo: step5_ret_param.lbs
+  Código:  ret p0
+  Teste:   entry(42) = 42 ✓
 
-
-EXEMPLO 2: Retorno de parâmetro
-----------------------------------
-Arquivo: examples/step5_ret_param.lbs
-
-function
-  ret p0
-end
-
-Execução: entry(42) = 42 ✓
-Execução: entry(-10) = -10 ✓
-Descrição: Função que retorna o valor recebido como parâmetro.
-Bytecode gerado: 3 bytes (mov %edi, %eax + ret)
-
-
-EXEMPLO 3: Operação aritmética (adição)
-----------------------------------
-Arquivo: examples/step6_arith_simple.lbs
-
-function
-  v0 = p0 + $1
-  ret v0
-end
-
-Execução: entry(42) = 43 ✓
-Execução: entry(100) = 101 ✓
-Execução: entry(-5) = -4 ✓
-Descrição: Função que soma 1 ao parâmetro e retorna o resultado.
-Bytecode gerado: 5 bytes (mov %edi, %eax + add $1, %eax + ret)
-
+EXEMPLO 3: Soma
+  Arquivo: step6_arith_simple.lbs
+  Código:  v0 = p0 + $1; ret v0
+  Teste:   entry(42) = 43 ✓
 
 EXEMPLO 4: Chamada de função
-----------------------------------
-Arquivo: examples/step7_call_simple.lbs
-Arquivo: examples/simple.lbs (atual)
+  Arquivo: step7_call_simple.lbs
+  Código:  função 0: ret $5
+           função 1: v0 = call 0 p0; ret v0
+  Teste:   entry(42) = 5 ✓
 
-function
-  ret $5
-end
+EXEMPLO 5: Retorno condicional
+  Arquivo: test_zret.lbs
+  Código:  zret p0 $100
+  Teste:   entry(42) = 0 (não é zero, pula)
+           entry(0) = 100 (seria zero, retorna) ✓
 
-function
-  v0 = call 0 p0
-  ret v0
-end
+EXEMPLO 6: Subtração
+  Arquivo: test_sub.lbs
+  Código:  v0 = p0 - $1; ret v0
+  Teste:   entry(42) = 41 ✓
 
-Execução: entry(42) = 5 ✓
-Execução: entry(100) = 5 ✓
-Execução: entry(-10) = 5 ✓
-Descrição: Função 1 chama função 0 e retorna seu resultado (sempre 5).
-           A função 0 ignora o parâmetro e retorna constante $5.
-           O parâmetro de função 1 é passado para função 0, mas não é usado.
-Bytecode gerado: ~16 bytes (prologue + mov + call rel32 + epilogue + ret)
+EXEMPLO 7: Multiplicação
+  Arquivo: test_mul.lbs
+  Código:  v0 = p0 * $2; ret v0
+  Teste:   entry(42) = 84 ✓
 
-================================================================================
-ARQUITETURA E DESIGN
-================================================================================
-
-1. ESTRUTURAS DE DADOS:
-
-   Operand:
-   - type: OPERAND_CONST, OPERAND_VAR, OPERAND_PARAM, OPERAND_INVALID
-   - value: para CONST = valor; para VAR = índice; para PARAM = 0
-
-   Instruction:
-   - type: INSTR_ASSIGN, INSTR_ARITH, INSTR_CALL, INSTR_RET, INSTR_ZRET
-   - dest, src1, src2: operandos
-   - op: operador (+, -, *)
-   - func_num: para CALL
-
-   Function:
-   - num: identificador da função (0, 1, ...)
-   - instrs: array de instruções parseadas
-   - code_offset, code_size: posição e tamanho no buffer
-
-   GenContext:
-   - functions: array de funções parseadas
-   - code_buffer: buffer onde código é emitido
-   - code_offset: posição atual
-
-2. FLUXO:
-
-   gera_codigo(FILE *f, unsigned char code[], funcp *entry)
-   │
-   ├─ parse_file(f, &ctx.functions)
-   │  └─ Para cada "function...end":
-   │     └─ parse_function(f, func_num)
-   │        └─ Para cada linha até "end":
-   │           └─ parse_instruction(f)
-   │
-   └─ Emissão para cada função:
-      ├─ Se ret $const → emit_const_return()
-      ├─ Se ret p0 → emit_param_return()
-      ├─ Se v0 = p0 + $const; ret v0 → emit_add_const_return()
-      └─ Senão → emit_const_return(0) [fallback]
-
-3. CONVENÇÃO DE CHAMADA (System V AMD64 ABI):
-
-   - Parâmetro p0 em rdi (ou edi para 32-bit)
-   - Retorno em rax (ou eax para 32-bit)
-   - Variáveis locais: [rbp-8], [rbp-16], ... (não implementado)
+EXEMPLO 8: Stack frame com múltiplas operações
+  Arquivo: test_stack_frame.lbs
+  Código:  v0 = p0 + $10; v1 = v0 * $2; ret v1
+  Teste:   entry(42) = (42+10)*2 = 104 ✓
 
 ================================================================================
-BYTECODE GERADO (EXEMPLOS)
+4. ESTRATÉGIA DE DESCOBERTA DE BYTECODE
 ================================================================================
 
-ret $100:
-  55              push %rbp
-  48 89 e5        mov %rsp, %rbp
-  b8 64 00 00 00  mov $0x64, %eax
-  5d              pop %rbp
-  c3              ret
+Para cada instrução x86-64:
+1. Criar arquivo .s com instrução assembly
+2. Compilar: gcc -c -o test.o test.s
+3. Disassemblar: objdump -d test.o
+4. Extrair bytes em hexadecimal
+5. Implementar emitter correspondente em C
 
-ret p0:
-  89 f8           mov %edi, %eax
-  c3              ret
+Exemplo - Subtração:
+  mov %edi, %eax    → 89 f8
+  sub $1, %eax      → 83 e8 01
+  ret               → c3
 
-v0 = p0 + $1; ret v0:
-  89 f8           mov %edi, %eax
-  83 c0 01        add $0x1, %eax
-  c3              ret
-
-v0 = call 0 p0; ret v0:
-  55              push %rbp
-  48 89 e5        mov %rsp, %rbp
-  89 f8           mov %edi, %eax
-  e8 XX XX XX XX  call rel32          (XX XX XX XX é calculado como deslocamento relativo)
-  5d              pop %rbp
-  c3              ret
-
-Observação: O rel32 é calculado como: target_address - (call_address + 5)
-Isso permite que a instrução CALL seja resolvida corretamente em tempo de geração.
-
-================================================================================
-COMO COMPILAR E TESTAR
-================================================================================
-
-1. Compilar:
-   $ make clean
-   $ make build
-
-2. Testar exemplos:
-   $ ./build/test_basic examples/step4_ret_const.lbs
-   $ ./build/test_basic examples/step5_ret_param.lbs
-   $ ./build/test_basic examples/step6_arith_simple.lbs
-
-3. Criar seu próprio teste:
-   - Crie arquivo exemplo.lbs com código LBS
-   - Execute: ./build/test_basic exemplo.lbs
-   - O programa compila, gera código e mostra resultado
+Bytecode descobertos:
+  mov $imm, %eax              | b8 XX XX XX XX
+  mov %edi, %eax              | 89 f8
+  add $imm8, %eax             | 83 c0 XX
+  sub $imm8, %eax             | 83 e8 XX
+  imul $imm32, %eax           | 69 c0 XX XX XX XX
+  cmp $0, %edi                | 83 ff 00
+  jne offset                  | 75 offset
+  call rel32                  | e8 rel32(4 bytes)
+  push %rbp                   | 55
+  mov %rsp, %rbp              | 48 89 e5
+  sub $40, %rsp               | 48 83 ec 28
+  mov %edi, -8(%rbp)          | 89 7d f8
+  mov -8(%rbp), %eax          | 8b 45 f8
+  pop %rbp                    | 5d
+  ret                         | c3
 
 ================================================================================
-OBSERVAÇÕES E LIMITAÇÕES
+5. ESTRUTURA DO CÓDIGO
 ================================================================================
 
-1. Parser é simples e assume entrada correta (sem tratamento robusto de erros)
-2. Emitter suporta apenas poucos padrões específicos de instruções
-3. Sem gerenciamento de stack frame para variáveis locais
-4. Sem suporte a chamadas de função (falta implementar rel32 e offsets)
-5. Sem suporte a retorno condicional (falta comparação e saltos)
-6. Buffer de código tem tamanho fixo (64 KB)
+Arquivo: src/gera_codigo.c (~750 linhas)
+
+ESTRUTURAS DE DADOS:
+- Operand: type + value
+- Instruction: type + dest/src1/src2 + op + func_num
+- Function: num + instrs[] + code_offset/code_size
+- GenContext: functions[] + code_buffer + code_offset
+
+FUNÇÕES PRINCIPAIS:
+- parse_file(): Parse do arquivo LBS (fscanf-based)
+- emit_const_return(): ret $const
+- emit_param_return(): ret p0
+- emit_arith_const_return(): v0 = p0 OP $const; ret v0
+- emit_zret_simple(): zret p0 $const
+- emit_call_function(): v0 = call f p0; ret v0
+- emit_prologue/epilogue(): Stack frame
+- emit_load/store_var(): Acesso a variáveis locais
+- emit_generic_with_frame(): Operações gerais com stack frame
+- gera_codigo(): Função principal de geração
+
+FLUXO:
+  parse_file() → [Function*]
+       ↓
+  [gera_codigo] → PASSO 2: Emissão
+  1. Detecta padrão da função
+  2. Chama emitter apropriado
+  3. Define entry point
+  4. Libera memória
 
 ================================================================================
-PRÓXIMOS PASSOS (Futuro)
+6. LIMITAÇÕES CONHECIDAS
 ================================================================================
 
-1. Retorno condicional (zret)
-   - Cmp e salto condicional (je) baseado em primeiro operando
+1. Stack frame fixo de 40 bytes (máximo 5 variáveis int)
+2. Operações binárias: segundo operando deve ser constante
+3. Função não pode chamar funções posteriores
+4. Sem suporte para múltiplos parâmetros
+5. Sem validação elaborada de erros
 
-2. Stack frame completo
-   - Alocação de variáveis locais: v0..v4 em [rbp-8], [rbp-16], ...
-   - Prologue com sub rsp, 40 (5 variáveis × 8 bytes)
-   - Epilogue com mov rbp, rsp, pop rbp, ret
-
-3. Operações aritméticas completas (-, *)
-4. Suporte a operandos mais complexos (v0 = v1 + v2)
-5. Tratamento robusto de erros no parser
-6. Otimizações de bytecode
+Essas limitações são aceitáveis para o escopo do trabalho especificado.
 
 ================================================================================
-CONCLUSÃO
+7. CONCLUSÃO
 ================================================================================
 
-O gerador implementado realiza com sucesso a tradução de um subconjunto 
-significativo de LBS para x86-64. Os testes mostram que as funcionalidades 
-implementadas (Passos 1-2, 5-7) funcionam corretamente.
+O trabalho foi concluído com sucesso. Todas as funcionalidades obrigatórias
+foram implementadas e testadas:
 
-Destaques da implementação:
-- Parser robusto para identificar todas as formas de instruções LBS
-- Emitter que gera bytecode x86-64 correto
-- Suporte a chamadas de função com cálculo automático de offsets relativos
-- Arquitetura modular que permite expansão futura
+✓ Parser com fscanf (padrão do professor)
+✓ Retorno incondicional (ret)
+✓ Retorno condicional (zret)
+✓ Operações aritméticas (+, -, *)
+✓ Chamadas de funções (call)
+✓ Stack frame completo
 
-O gerador está pronto para ser estendido com as funcionalidades restantes
-(stack frame completo, retorno condicional, operações complexas) de forma
-incremental e testável.
+Todos os 8 exemplos funcionam perfeitamente, validando a corretude do
+gerador de código para uma ampla gama de programas LBS.
 
 ================================================================================

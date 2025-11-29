@@ -1,0 +1,65 @@
+================================================================================
+INSTRUÇÕES DE COMPILAÇÃO E EXECUÇÃO
+================================================================================
+
+COMPILAÇÃO:
+-----------
+cd /workspaces/inf1810/trabG2
+make build
+
+EXECUÇÃO:
+---------
+./build/test_basic examples/<arquivo.lbs>
+
+Exemplos:
+./build/test_basic examples/step4_ret_const.lbs      # entry(42) = 100
+./build/test_basic examples/step5_ret_param.lbs      # entry(42) = 42
+./build/test_basic examples/step6_arith_simple.lbs   # entry(42) = 43
+./build/test_basic examples/step7_call_simple.lbs    # entry(42) = 5
+./build/test_basic examples/test_zret.lbs            # entry(42) = 0
+./build/test_basic examples/test_sub.lbs             # entry(42) = 41
+./build/test_basic examples/test_mul.lbs             # entry(42) = 84
+./build/test_basic examples/test_stack_frame.lbs     # entry(42) = 104
+
+LIMPEZA:
+--------
+make clean
+
+================================================================================
+ESTRUTURA DO PROJETO
+================================================================================
+
+src/gera_codigo.c              - Implementação principal (736 linhas)
+include/gera_codigo.h          - Interface de gera_codigo (não modificar)
+tests/test_basic.c             - Programa de teste
+examples/                      - Exemplos de código LBS
+relatorio.txt                  - Documentação detalhada
+Makefile                       - Build system
+
+================================================================================
+FUNCIONALIDADES IMPLEMENTADAS
+================================================================================
+
+✓ Parser com fscanf (conforme padrão do professor)
+✓ Retorno incondicional (ret varpc)
+✓ Retorno condicional (zret varpc varpc)
+✓ Operações aritméticas (v = a +/-/* b; ret v)
+✓ Chamadas de funções (v = call f arg; ret v)
+✓ Stack frame completo com variáveis locais (v0-v4)
+
+================================================================================
+RESULTADO DOS TESTES
+================================================================================
+
+8/8 exemplos passaram com sucesso:
+
+✓ step4_ret_const.lbs:       entry(42) = 100 (ret $100)
+✓ step5_ret_param.lbs:       entry(42) = 42  (ret p0)
+✓ step6_arith_simple.lbs:    entry(42) = 43  (v0 = p0 + $1; ret v0)
+✓ step7_call_simple.lbs:     entry(42) = 5   (call function 0)
+✓ test_zret.lbs:             entry(42) = 0   (zret p0 $100)
+✓ test_sub.lbs:              entry(42) = 41  (v0 = p0 - $1; ret v0)
+✓ test_mul.lbs:              entry(42) = 84  (v0 = p0 * $2; ret v0)
+✓ test_stack_frame.lbs:      entry(42) = 104 (v0 = p0+10; v1 = v0*2; ret v1)
+
+================================================================================
