@@ -1,0 +1,4 @@
+; Passo 5: Função que retorna o valor do parâmetro
+function
+  ret p0
+end

@@ -1,0 +1,5 @@
+; Passo 6: Operação aritmética simples (p0 + 1)
+function
+  v0 = p0 + $1
+  ret v0
+end

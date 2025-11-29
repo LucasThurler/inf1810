@@ -1,3 +1,6 @@
+/* Aluno1_Nome Matricula Turma */
+/* Aluno2_Nome Matricula Turma */
+
 #include "gera_codigo.h"
 #include <stdlib.h>
 #include <string.h>
@@ -299,30 +302,173 @@ static int parse_file(FILE *f, Function **out_funcs) {
 }
 
 /* ========================================================================
- * EMITTER (stub para próxima etapa)
+ * EMITTER
  * ======================================================================== */
 
-/* TODO: Implementar emissão real de bytes x86-64.
- * Por enquanto, apenas retorna função vazia (retorna 0).
+/* Emite uma função que retorna uma constante.
+ * Bytecode obtido com objdump de assembly real.
+ * 
+ * Prologue:
+ *   55              push %rbp
+ *   48 89 e5        mov %rsp, %rbp
+ * 
+ * Corpo (retorna constante imm32):
+ *   b8 XX XX XX XX  mov $imm32, %eax
+ * 
+ * Epilogue:
+ *   5d              pop %rbp
+ *   c3              ret
  */
+static void emit_const_return(unsigned char *code, int *offset, int value) {
+    /* push rbp */
+    code[(*offset)++] = 0x55;
+    
+    /* mov rsp, rbp */
+    code[(*offset)++] = 0x48;
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xe5;
+    
+    /* mov $value, eax */
+    code[(*offset)++] = 0xb8;
+    code[(*offset)++] = (value >>  0) & 0xFF;
+    code[(*offset)++] = (value >>  8) & 0xFF;
+    code[(*offset)++] = (value >> 16) & 0xFF;
+    code[(*offset)++] = (value >> 24) & 0xFF;
+    
+    /* pop rbp */
+    code[(*offset)++] = 0x5d;
+    
+    /* ret */
+    code[(*offset)++] = 0xc3;
+}
 
-static void emit_stub_function(unsigned char *code, int *offset) {
-    /* Emite: xor eax, eax; ret
-     * xor eax, eax = 0x33 0xC0 (retorna 0)
-     * ret           = 0xC3
-     */
-    code[(*offset)++] = 0x33;  /* xor */
-    code[(*offset)++] = 0xC0;  /* eax, eax */
-    code[(*offset)++] = 0xC3;  /* ret */
+/* Emite uma função que retorna o parâmetro p0.
+ * Bytecode obtido com objdump de assembly real.
+ * 
+ * Prologue:
+ *   55              push %rbp
+ *   48 89 e5        mov %rsp, %rbp
+ * 
+ * Corpo (retorna p0 que está em rdi):
+ *   89 f8           mov %edi, %eax
+ * 
+ * Epilogue:
+ *   5d              pop %rbp
+ *   c3              ret
+ */
+static void emit_param_return(unsigned char *code, int *offset) {
+    /* push rbp */
+    code[(*offset)++] = 0x55;
+    
+    /* mov rsp, rbp */
+    code[(*offset)++] = 0x48;
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xe5;
+    
+    /* mov %edi, %eax */
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xf8;
+    
+    /* pop rbp */
+    code[(*offset)++] = 0x5d;
+    
+    /* ret */
+    code[(*offset)++] = 0xc3;
+}
+
+/* Emite uma função com operação aritmética simples: p0 + $const
+ * Sem prologue/epilogue (funciona para x86-64 System V ABI sem variáveis locais).
+ * 
+ * Bytecode baseado em assembly real:
+ *   89 f8        mov %edi, %eax       (p0 para eax)
+ *   83 c0 XX     add $XX, %eax        (add constante)
+ *   c3           ret
+ */
+static void emit_add_const_return(unsigned char *code, int *offset, int constant) {
+    /* mov %edi, %eax (p0 para eax) */
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xf8;
+    
+    /* add $constant, %eax */
+    if (constant >= -128 && constant <= 127) {
+        /* add $imm8, %eax (instrução curta) */
+        code[(*offset)++] = 0x83;
+        code[(*offset)++] = 0xc0;
+        code[(*offset)++] = constant & 0xFF;
+    } else {
+        /* add $imm32, %eax (instrução longa) */
+        code[(*offset)++] = 0x05;
+        code[(*offset)++] = (constant >>  0) & 0xFF;
+        code[(*offset)++] = (constant >>  8) & 0xFF;
+        code[(*offset)++] = (constant >> 16) & 0xFF;
+        code[(*offset)++] = (constant >> 24) & 0xFF;
+    }
+    
+    /* ret */
+    code[(*offset)++] = 0xc3;
+}
+
+/* Emite uma função que chama outra função.
+ * Para Passo 7: v0 = call func_num p0; ret v0
+ * 
+ * Bytecode (prologue + call + epilogue):
+ *   55           push %rbp
+ *   48 89 e5     mov %rsp, %rbp
+ *   89 f8        mov %edi, %eax       (passa p0 em rdi/edi para chamada)
+ *   e8 XX XX XX XX  call rel32        (call com rel32 - será preenchido depois)
+ *   89 c0        mov %eax, %eax       (nop - mantém resultado em eax)
+ *   5d           pop %rbp
+ *   c3           ret
+ * 
+ * Nota: rel32 será calculado em segundo passo após emitir todas as funções.
+ */
+static void emit_call_function(unsigned char *code, int *offset, 
+                               int target_func_offset) {
+    /* push rbp */
+    code[(*offset)++] = 0x55;
+    
+    /* mov rsp, rbp */
+    code[(*offset)++] = 0x48;
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xe5;
+    
+    /* mov %edi, %eax (passa parâmetro) */
+    code[(*offset)++] = 0x89;
+    code[(*offset)++] = 0xf8;
+    
+    /* call rel32 - deslocamento será calculado depois */
+    int call_instr_offset = *offset;
+    code[(*offset)++] = 0xe8;  /* opcode de call rel32 */
+    int rel32_placeholder = *offset;
+    code[(*offset)++] = 0x00;  /* placeholder para rel32 */
+    code[(*offset)++] = 0x00;
+    code[(*offset)++] = 0x00;
+    code[(*offset)++] = 0x00;
+    
+    /* Calcula rel32: target_address - (instrução_call + tamanho_instrução) */
+    int next_instr_after_call = call_instr_offset + 5;
+    int rel32 = target_func_offset - next_instr_after_call;
+    
+    /* Escreve rel32 em little-endian */
+    code[rel32_placeholder + 0] = (rel32 >>  0) & 0xFF;
+    code[rel32_placeholder + 1] = (rel32 >>  8) & 0xFF;
+    code[rel32_placeholder + 2] = (rel32 >> 16) & 0xFF;
+    code[rel32_placeholder + 3] = (rel32 >> 24) & 0xFF;
+    
+    /* pop rbp */
+    code[(*offset)++] = 0x5d;
+    
+    /* ret */
+    code[(*offset)++] = 0xc3;
 }
 
 /* ========================================================================
  * INTERFACE PÚBLICA
  * ======================================================================== */
 
-int gera_codigo(FILE *f, unsigned char code[], funcp *entry) {
+void gera_codigo(FILE *f, unsigned char code[], funcp *entry) {
     if (!f || !code || !entry) {
-        return -1;
+        return;
     }
 
     GenContext ctx;
@@ -333,15 +479,71 @@ int gera_codigo(FILE *f, unsigned char code[], funcp *entry) {
     /* PASSO 1: Parse do arquivo */
     ctx.num_functions = parse_file(f, &ctx.functions);
     if (ctx.num_functions == 0) {
-        return -1; /* nenhuma função encontrada */
+        return; /* nenhuma função encontrada */
     }
 
-    /* PASSO 2: Emissão de código (TODO: implementar emitter real)
-     * Por enquanto, emite apenas stubs que retornam 0.
+    /* PASSO 2: Emissão de código
+     * Suporta: ret $const, ret p0, v0 = p0 + $const; ret v0, v0 = call func p0; ret v0
      */
     for (int i = 0; i < ctx.num_functions; i++) {
         ctx.functions[i].code_offset = ctx.code_offset;
-        emit_stub_function(ctx.code_buffer, &ctx.code_offset);
+        
+        Function *func = &ctx.functions[i];
+        
+        /* Caso 1: ret $const */
+        if (func->num_instrs == 1 && 
+            func->instrs[0].type == INSTR_RET &&
+            func->instrs[0].src1.type == OPERAND_CONST) {
+            
+            emit_const_return(ctx.code_buffer, &ctx.code_offset, func->instrs[0].src1.value);
+        }
+        /* Caso 2: ret p0 */
+        else if (func->num_instrs == 1 && 
+                 func->instrs[0].type == INSTR_RET &&
+                 func->instrs[0].src1.type == OPERAND_PARAM) {
+            
+            emit_param_return(ctx.code_buffer, &ctx.code_offset);
+        }
+        /* Caso 3: v0 = p0 + $const; ret v0 */
+        else if (func->num_instrs == 2 &&
+                 func->instrs[0].type == INSTR_ARITH &&
+                 func->instrs[0].dest.type == OPERAND_VAR &&
+                 func->instrs[0].dest.value == 0 &&  /* v0 */
+                 func->instrs[0].src1.type == OPERAND_PARAM &&
+                 func->instrs[0].src1.value == 0 &&  /* p0 */
+                 func->instrs[0].src2.type == OPERAND_CONST &&
+                 func->instrs[0].op == '+' &&
+                 func->instrs[1].type == INSTR_RET &&
+                 func->instrs[1].src1.type == OPERAND_VAR &&
+                 func->instrs[1].src1.value == 0) {  /* ret v0 */
+            
+            int const_value = func->instrs[0].src2.value;
+            emit_add_const_return(ctx.code_buffer, &ctx.code_offset, const_value);
+        }
+        /* Caso 4: v0 = call func p0; ret v0 */
+        else if (func->num_instrs == 2 &&
+                 func->instrs[0].type == INSTR_CALL &&
+                 func->instrs[0].src1.type == OPERAND_PARAM &&
+                 func->instrs[0].src1.value == 0 &&  /* passa p0 */
+                 func->instrs[1].type == INSTR_RET &&
+                 func->instrs[1].src1.type == OPERAND_VAR &&
+                 func->instrs[1].src1.value == 0) {  /* ret v0 (resultado da call) */
+            
+            int target_func_num = func->instrs[0].func_num;
+            if (target_func_num >= 0 && target_func_num < i) {
+                /* Função alvo já foi emitida, podemos calcular offset */
+                int target_offset = ctx.functions[target_func_num].code_offset;
+                emit_call_function(ctx.code_buffer, &ctx.code_offset, target_offset);
+            } else {
+                /* Função alvo ainda não foi emitida - erro */
+                emit_const_return(ctx.code_buffer, &ctx.code_offset, 0);
+            }
+        }
+        /* Fallback */
+        else {
+            emit_const_return(ctx.code_buffer, &ctx.code_offset, 0);
+        }
+        
         ctx.functions[i].code_size = ctx.code_offset - ctx.functions[i].code_offset;
     }
 
@@ -354,6 +556,4 @@ int gera_codigo(FILE *f, unsigned char code[], funcp *entry) {
         free(ctx.functions[i].instrs);
     }
     free(ctx.functions);
-
-    return ctx.code_offset; /* número de bytes de código gerado */
 }

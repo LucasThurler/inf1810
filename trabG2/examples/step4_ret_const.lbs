@@ -1,0 +1,4 @@
+; Passo 4: Função simples que retorna constante
+function
+  ret $100
+end

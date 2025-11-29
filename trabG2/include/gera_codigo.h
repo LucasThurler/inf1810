@@ -1,23 +1,20 @@
+/*
+ * Cabeçalho para o 2º trabalho
+ * Lembre-se de ***NÃO*** entregar a função main
+ * ***NÃO*** modifique esse arquivo
+ */
+
 #ifndef GERA_CODIGO_H
 #define GERA_CODIGO_H
 
 #include <stdio.h>
 
-/* Tipo de ponteiro para funções geradas dinamicamente.
- * Aceita um argumento inteiro de 32 bits e retorna inteiro de 32 bits.
- */
-typedef int (*funcp)(int);
+/* tipo ponteiro para função que recebe um inteiro e retorna um inteiro */
+typedef int (*funcp) (int x);
 
-/* Gera código de máquina x86-64 a partir de um arquivo LBS.
- *
- * Parâmetros:
- *   f       - arquivo aberto para leitura contendo código LBS
- *   code    - buffer onde o código de máquina será escrito
- *   entry   - será preenchido com ponteiro para o início da última função
- *
- * Retorna:
- *   número de bytes escritos em code, ou -1 em caso de erro
+/* protótipo da função que recebe um arquivo previamente aberto e preenche 
+ * o vetor de bytes (char) com o código gerado
  */
-int gera_codigo(FILE *f, unsigned char code[], funcp *entry);
+void gera_codigo (FILE *f, unsigned char code[], funcp *entry);
 
 #endif
