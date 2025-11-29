@@ -40,7 +40,7 @@ Makefile                       - Build system
 FUNCIONALIDADES IMPLEMENTADAS
 ================================================================================
 
-✓ Parser com fscanf (conforme padrão do professor)
+✓ Parser com fscanf 
 ✓ Retorno incondicional (ret varpc)
 ✓ Retorno condicional (zret varpc varpc)
 ✓ Operações aritméticas (v = a +/-/* b; ret v)

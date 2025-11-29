@@ -4,7 +4,7 @@ Segundo Trabalho: Gerador de Código LBS → x86-64
 ================================================================================
 
 INTEGRANTES DO GRUPO:
-[Adicionar nomes e matrículas dos integrantes]
+/* Lucas Thurler Gonçalves 2212824 3WA */
 
 ================================================================================
 1. RESUMO EXECUTIVO
@@ -21,7 +21,7 @@ RESULTADO: ✓ Todas as funcionalidades obrigatórias implementadas e testadas
 2. FUNCIONALIDADES IMPLEMENTADAS
 ================================================================================
 
-✓ PARSER COM fscanf (conforme importante.txt do professor)
+✓ PARSER COM fscanf 
   - Usa fgetc para ler caractere inicial do comando
   - Usa fscanf com padrões específicos para cada tipo de instrução
   - Suporta: function, end, ret, zret, v0=, call
