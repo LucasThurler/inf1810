@@ -1,5 +1,4 @@
-/* Aluno1_Nome Matricula Turma */
-/* Aluno2_Nome Matricula Turma */
+/* Lucas Thurler Gonçalves 2212824 3WA */
 
 #include "gera_codigo.h"
 #include <stdlib.h>
@@ -232,7 +231,7 @@ static int parse_file(FILE *f, Function **out_funcs) {
  * EMITTER
  * ======================================================================== */
 
-/* Emite uma função que retorna uma constante.
+/* Emite função que retorna uma constante.
  * Bytecode obtido com objdump de assembly real.
  * 
  * Prologue:
@@ -269,7 +268,7 @@ static void emit_const_return(unsigned char *code, int *offset, int value) {
     code[(*offset)++] = 0xc3;
 }
 
-/* Emite uma função que retorna o parâmetro p0.
+/* Emite função que retorna o parâmetro p0.
  * Bytecode obtido com objdump de assembly real.
  * 
  * Prologue:
@@ -303,7 +302,7 @@ static void emit_param_return(unsigned char *code, int *offset) {
     code[(*offset)++] = 0xc3;
 }
 
-/* Emite uma função com operação aritmética: v0 = p0 OP $const; ret v0
+/* Emite função com operação aritmética: v0 = p0 OP $const; ret v0
  * Suporta operadores: + (add), - (sub), * (imul)
  * 
  * Bytecode:
@@ -456,7 +455,7 @@ static void emit_zret_simple(unsigned char *code, int *offset,
 }
 
 /* Emite uma função que chama outra função.
- * Para Passo 7: v0 = call func_num p0; ret v0
+ * v0 = call func_num p0; ret v0
  * 
  * Bytecode (prologue + call + epilogue):
  *   55           push %rbp
@@ -466,8 +465,6 @@ static void emit_zret_simple(unsigned char *code, int *offset,
  *   89 c0        mov %eax, %eax       (nop - mantém resultado em eax)
  *   5d           pop %rbp
  *   c3           ret
- * 
- * Nota: rel32 será calculado em segundo passo após emitir todas as funções.
  */
 static void emit_call_function(unsigned char *code, int *offset, 
                                int target_func_offset) {
